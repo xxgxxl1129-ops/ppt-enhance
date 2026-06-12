@@ -9,7 +9,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
-from ppt_enhance.builder.font_utils import estimate_font_size
+from ppt_enhance.builder.font_utils import default_cjk_font, estimate_font_size
 from ppt_enhance.schemas.slide_ir import ElementType, SlideIR
 
 # 16:9 默认幻灯片尺寸（英寸）
@@ -157,7 +157,7 @@ def build_pptx(
             # 不超过框高，留 5% 余量防溢出
             font_size = min(font_size, box_h_pt * 0.95)
             p.font.size = Pt(max(8.0, font_size))
-            p.font.name = "Microsoft YaHei"
+            p.font.name = default_cjk_font()
             # 分层模式用采样文字色；高保真模式保持黑色
             if use_background:
                 p.font.color.rgb = RGBColor(0, 0, 0)

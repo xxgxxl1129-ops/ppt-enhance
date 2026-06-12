@@ -23,6 +23,13 @@ def main() -> None:
         choices=["docling", "qwen-ocr"],
         help="解析器：docling（矢量文本）或 qwen-ocr（纯图片 PDF，如 NotebookLM 导出）",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="anchor",
+        choices=["anchor", "outline"],
+        help="重建路线：anchor（坐标锚定，默认，无需 API）或 outline（语义大纲逆推，干净可编辑版面，需 qwen3-vl API key）",
+    )
     parser.add_argument("--no-correction", action="store_true", help="跳过智能纠错")
     parser.add_argument("--no-eval", action="store_true", help="跳过质量评测")
     parser.add_argument("--dpi", type=int, default=150, help="渲染 DPI")
@@ -44,6 +51,7 @@ def main() -> None:
         use_background=not args.no_background,
         ground_truth_text=gt_text,
         parser=args.parser,
+        mode=args.mode,
     )
 
     print(f"\n✅ 转换完成")

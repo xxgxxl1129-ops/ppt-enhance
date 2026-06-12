@@ -14,6 +14,8 @@ from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.oxml.ns import qn
 from pptx.util import Inches, Pt
 
+from ppt_enhance.builder.font_utils import default_cjk_font
+
 SLIDE_W = 13.333
 SLIDE_H = 7.5
 
@@ -145,7 +147,7 @@ def _textbox(slide, text, l, t, w, h, *, size, color, bold=False,
     r.font.size = Pt(size)
     r.font.bold = bold
     r.font.italic = italic
-    r.font.name = "PingFang SC"
+    r.font.name = default_cjk_font()
     r.font.color.rgb = _hex(color, (255, 255, 255))
     return tb
 
@@ -381,7 +383,7 @@ def _multiline_textbox(slide, lines, l, t, w, h, *, size, color, bold=False,
         p.line_spacing = 1.12
         r = p.add_run(); r.text = line
         r.font.size = Pt(size); r.font.bold = bold; r.font.italic = italic
-        r.font.name = "PingFang SC"; r.font.color.rgb = _hex(color, (255, 255, 255))
+        r.font.name = default_cjk_font(); r.font.color.rgb = _hex(color, (255, 255, 255))
     return tb
 
 

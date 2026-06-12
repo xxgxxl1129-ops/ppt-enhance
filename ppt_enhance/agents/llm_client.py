@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ class LLMClient:
         self.base_url = base_url or settings.openai_base_url
         self.model = model or settings.openai_model
         self._client: OpenAI | None = None
+        self._client_lock = threading.Lock()
 
     @property
     def available(self) -> bool:
@@ -40,8 +42,11 @@ class LLMClient:
 
     @property
     def client(self) -> OpenAI:
+        # 双重检查锁：多线程并行调用时只初始化一个底层 client
         if self._client is None:
-            self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+            with self._client_lock:
+                if self._client is None:
+                    self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return self._client
 
     def chat_json(self, system: str, user: str, temperature: float = 0.2) -> dict[str, Any]:

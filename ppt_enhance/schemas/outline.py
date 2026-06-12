@@ -13,6 +13,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from ppt_enhance.builder.font_utils import default_cjk_font
+
 
 class LayoutType(str, Enum):
     TITLE_COVER = "title_cover"      # 封面
@@ -82,7 +84,7 @@ class StyleSpec(BaseModel):
     heading_size: float = 14.0
     body_size: float = 10.5
     # 字体
-    font_name: str = "PingFang SC"
+    font_name: str = Field(default_factory=default_cjk_font)
 
 
 class KeepRegion(BaseModel):

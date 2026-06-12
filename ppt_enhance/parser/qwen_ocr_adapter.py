@@ -117,11 +117,16 @@ def parse_with_qwen_ocr(
     api_key: str | None = None,
     model: str = "qwen-vl-ocr-latest",
     enable_rotate: bool = False,
+    progress_cb=None,
 ) -> SlideIR:
     """使用 Qwen-OCR 将纯图片 PDF 解析为 SlideIR.
 
     适用于 NotebookLM 等导出的、无矢量文字层的图片型 PDF。
+    每页一次 OCR VLM 调用，按页并行（DashScope 客户端线程安全）。
+    progress_cb(done, total) 在每页 OCR 完成时回调（主线程）。
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     api_key = api_key or settings.openai_api_key
     if not api_key:
         raise RuntimeError(
@@ -136,14 +141,33 @@ def parse_with_qwen_ocr(
     page_images = render_pdf_pages(pdf_path, render_dir, dpi=dpi)
     page_sizes = get_page_size(pdf_path, dpi=dpi)
 
+    page_nos = sorted(page_images)
+    total = len(page_nos)
+
+    def ocr_one(page_no):
+        png = page_images[page_no]
+        words_info = _ocr_page(png, api_key=api_key, model=model, enable_rotate=enable_rotate)
+        return page_no, words_info
+
+    # 并行 OCR：网络等待为主，6 路并发显著缩短墙钟时间
+    ocr_results: dict[int, list[dict]] = {}
+    workers = min(settings.vlm_concurrency, max(1, total))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futures = [ex.submit(ocr_one, pno) for pno in page_nos]
+        for done_n, fut in enumerate(as_completed(futures), start=1):
+            pno, words_info = fut.result()
+            ocr_results[pno] = words_info
+            if progress_cb:
+                progress_cb(done_n, total)
+
     pages: list[SlidePage] = []
     all_texts: list[str] = []
     total_elems = 0
 
-    for page_no in sorted(page_images):
+    for page_no in page_nos:  # 按页序构建
         png = page_images[page_no]
         w, h = page_sizes.get(page_no, (1920, 1080))
-        words_info = _ocr_page(png, api_key=api_key, model=model, enable_rotate=enable_rotate)
+        words_info = ocr_results[page_no]
 
         elements: list[SlideElement] = []
         for idx, line in enumerate(words_info):

@@ -72,8 +72,9 @@ def _fallback_render(pptx_path: Path, output_dir: Path) -> list[Path]:
     for i, _slide in enumerate(prs.slides):
         img = Image.new("RGB", (max(w, 1280), max(h, 720)), color=(255, 255, 255))
         draw = ImageDraw.Draw(img)
+        # 占位图只画英文标记，无需 CJK 字体；任一平台失败均回退默认字体
         try:
-            font = ImageFont.truetype("/System/Library/Fonts/PingFang.ttc", 24)
+            font = ImageFont.truetype("DejaVuSans.ttf", 24)
         except OSError:
             font = ImageFont.load_default()
         draw.text((40, 40), f"Slide {i + 1} (fallback render)", fill=(100, 100, 100), font=font)

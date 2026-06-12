@@ -22,9 +22,24 @@ st.caption("高保真 PDF-to-PPTX 重建 · 多智能体智能纠错 · 量化�
 
 with st.sidebar:
     st.header("⚙️ 设置")
+    parser_choice = st.radio(
+        "解析器",
+        options=["docling", "qwen-ocr"],
+        format_func=lambda p: {"docling": "Docling（矢量文本 PDF）",
+                               "qwen-ocr": "Qwen-OCR（纯图片 PDF，如 NotebookLM 导出）"}[p],
+        help="纯图片 PDF（NotebookLM 等导出）必须用 Qwen-OCR，否则提取不到文字、版面为空。",
+    )
+    mode = st.radio(
+        "重建路线",
+        options=["anchor", "outline"],
+        format_func=lambda m: {"anchor": "坐标锚定（默认，无需 API）",
+                               "outline": "语义大纲（干净可编辑，需 qwen3-vl API）"}[m],
+        help="outline 模式用 VLM 逆推每页语义大纲再用原生元素重画，版面更干净；未配置 API key 时会得到空白页。",
+    )
     enable_correction = st.toggle("启用智能纠错", value=True)
     enable_eval = st.toggle("启用质量评测", value=True)
-    use_background = st.toggle("整页背景模式（高视觉保真）", value=True)
+    use_background = st.toggle("整页背景模式（高视觉保真）", value=True,
+                               help="仅 anchor 模式生效")
     dpi = st.slider("渲染 DPI", 72, 300, 150, step=10)
     mineru_json = st.file_uploader("MinerU JSON（可选）", type=["json"])
     ground_truth = st.text_area("Ground Truth 文本（CER 评测，可选）", height=100)
@@ -45,6 +60,11 @@ if uploaded and st.button("🚀 开始转换", type="primary"):
         output_dir = tmp_path / "output"
         progress = st.progress(0, text="正在处理...")
 
+        # 进度回调由 run_pipeline 在主线程触发（VLM 并行在工作线程，
+        # 但回调统一回到主线程），故可直接更新 st.progress。
+        def on_progress(frac: float, text: str) -> None:
+            progress.progress(int(frac * 100), text=text)
+
         try:
             result = run_pipeline(
                 pdf_path=pdf_path,
@@ -55,6 +75,9 @@ if uploaded and st.button("🚀 开始转换", type="primary"):
                 dpi=dpi,
                 use_background=use_background,
                 ground_truth_text=ground_truth or None,
+                mode=mode,
+                parser=parser_choice,
+                progress_cb=on_progress,
             )
             progress.progress(100, text="完成")
 

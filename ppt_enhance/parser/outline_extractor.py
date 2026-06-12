@@ -314,16 +314,20 @@ def extract_outline(
 
     # 标题：VLM 选定后，合并紧邻的换行续行（多行标题常被只选一行）
     title_id = data.get("title_id")
+    subtitle_id = data.get("subtitle_id")
     used_ids = set()
     for n in data.get("nodes", []):
         for k in ("heading_id", "subtext_id"):
             if n.get(k):
                 used_ids.add(n[k])
         used_ids.update(n.get("body_ids", []) or [])
-    for k in ("subtitle_id", "footer_id"):
-        if data.get(k):
-            used_ids.add(data[k])
+    if data.get("footer_id"):
+        used_ids.add(data["footer_id"])
+    # 注意：subtitle_id 暂不计入 used_ids。VLM 常把「跨行标题的下半句」
+    # 误判为副标题；下面的续行合并若发现它在几何上紧贴标题（同 x 起点、
+    # 紧邻、字高相近），应优先并回标题，再从副标题剔除。
     title_ids = []
+    merged_subtitle = False
     if title_id and title_id in by_id:
         title_ids = [title_id]
         anchor = by_id[title_id].bbox
@@ -340,11 +344,16 @@ def extract_outline(
                     and abs((b.y1 - b.y0) - cur_h) < cur_h * 0.5):
                 title_ids.append(e.id)
                 cur_bottom = b.y1
+                if e.id == subtitle_id:
+                    merged_subtitle = True
 
     base.title = " ".join(text_of(i) for i in title_ids).strip()
     base.title_bbox_px = bbox_of_ids(title_ids) if title_ids else []
-    base.subtitle = text_of(data.get("subtitle_id"))
-    base.subtitle_bbox_px = bbox_of_ids([data["subtitle_id"]]) if data.get("subtitle_id") else []
+    # 续行已并回标题的副标题不再重复显示
+    if merged_subtitle:
+        subtitle_id = None
+    base.subtitle = text_of(subtitle_id) if subtitle_id else ""
+    base.subtitle_bbox_px = bbox_of_ids([subtitle_id]) if subtitle_id else []
     base.footer_note = text_of(data.get("footer_id"))
     base.footer_bbox_px = bbox_of_ids([data["footer_id"]]) if data.get("footer_id") else []
     base.nodes = nodes

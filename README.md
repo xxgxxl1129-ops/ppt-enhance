@@ -14,14 +14,27 @@
 
 ## 快速开始
 
+### 系统依赖（pip 装不上，需单独安装）
+
+两个可选的系统二进制；缺失时对应功能优雅降级（不报错）：
+
+| 工具 | 用途 | 缺失时 | 安装 |
+|------|------|--------|------|
+| **LibreOffice** | 质量评测（PPTX→PDF 往返渲染算 SSIM/IoU） | 回退占位图，标 `visual_reliable=False` | macOS: `brew install --cask libreoffice`；Ubuntu: `apt install libreoffice` |
+| **pandoc** | 公式 LaTeX→OMML 原生可编辑公式 | 公式回退为纯文本 | macOS: `brew install pandoc`；Ubuntu: `apt install pandoc` |
+
+Linux 另需中文字体（否则 outline 版面中文回退替代字体）：`apt install fonts-noto-cjk`。
+
+### 安装与运行
+
 ```bash
 # 安装
 cd PPT_enhance
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-# 配置 API（可选，无 API 时使用规则纠错）
-cp .env.example .env
+# 配置 API
+cp .env.example .env   # 填入 DashScope/OpenAI 兼容 key
 
 # 生成测试 PDF
 python scripts/create_sample_pdf.py
@@ -32,15 +45,24 @@ ppt-enhance data/samples/sample_slides.pdf
 # 纯图片 PDF（如 NotebookLM 导出）走 OCR 通路
 ppt-enhance input.pdf --parser qwen-ocr
 
+# 语义大纲逆推模式：用原生 PPT 元素重画，得到干净、100% 可编辑的版面（需 qwen3-vl API key）
+ppt-enhance input.pdf --parser qwen-ocr --mode outline
+
 # Web 界面
 streamlit run ppt_enhance/ui/app.py
 ```
+
+> **关于 `--mode outline`（干净可编辑版面）的前提**：该模式靠 VLM（qwen3-vl）逐页逆推语义大纲，
+> **必须配置 API key**；未配置时每页得到空白版面（会打印提示，不报错）。纯图片 PDF（NotebookLM
+> 等导出）务必同时加 `--parser qwen-ocr`，否则 docling 提取不到文字、版面为空。
+> 并发数可用环境变量 `VLM_CONCURRENCY`（默认 6）调整：key 并发额度高时调大提速，过高会限流。
 
 ### CLI 参数
 
 | 参数 | 说明 |
 |------|------|
 | `--parser {docling,qwen-ocr}` | 解析器：矢量文本用 docling，纯图片 PDF 用 qwen-ocr |
+| `--mode {anchor,outline}` | 重建路线：`anchor`（坐标锚定，默认，无需 API）/ `outline`（语义大纲逆推，干净可编辑版面，需 qwen3-vl API key） |
 | `--mineru-json PATH` | 复用 MinerU JSON（兼容 NotebookLM2PPT 格式） |
 | `--no-correction` | 跳过智能纠错 |
 | `--no-eval` | 跳过质量评测 |
@@ -68,6 +90,7 @@ ppt_enhance/
 **已实现**
 - ✅ 三条解析通路：Docling（矢量）、Qwen-OCR（纯图片 PDF，绝对像素坐标）、MinerU JSON 导入
 - ✅ 坐标锚定重建（`pptx_builder`）：按源坐标注入文本，只改字不改框，已接入主流水线
+- ✅ 语义大纲逆推重建（`outline_extractor` + `layout_engine`）：不逆向像素而逆向到「生成这页时的语义大纲」，再用原生 PPT 元素重画，得到更干净、100% 可编辑的版面。已接入主流水线，经 `--mode outline` 与坐标锚定路线统一切换（需 qwen3-vl API key；无 key 时回退空白版面）
 - ✅ 双 Agent 受控纠错：OCR 纠错走绝对字符差阈值、去 AI 腔润色走比例阈值；跨全文档术语表上下文；无 API key 时规则兜底
 - ✅ 公式处理：LaTeX → pandoc → OMML 原生可编辑公式
 - ✅ 评测体系：SSIM / PSNR / 可编辑性 / CER，外加往返版面 IoU（PPTX 经 LibreOffice 渲染回 PDF 再独立重提坐标，避免循环论证）
@@ -76,7 +99,7 @@ ppt_enhance/
 - ✅ 检测框可视化：把 OCR 定位框画回原图，人工核对坐标对齐
 
 **部分实现 / 实验中**
-- 🟡 大纲逆推重建路线（`outline_extractor` + `layout_engine`）：不逆向像素而逆向到「生成这页时的语义大纲」，再用原生 PPT 元素重画，得到更干净、100% 可编辑的版面。目前仅在 `scripts/batch_outline.py`、`scripts/render_full.py` 中跑，**尚未接入主流水线**，未与坐标锚定路线做统一切换。
+- 🟡 跨平台中文字体：重建时按运行平台自动选择中文字体（macOS PingFang SC / Windows 微软雅黑 / Linux Noto Sans CJK SC），消除「在哪生成、换台机器预览就错位」。Linux 需自备 Noto Sans CJK，否则 LibreOffice 回退等价字体。
 
 ## 未实现 / 路线图
 
@@ -84,10 +107,9 @@ ppt_enhance/
 
 1. **演讲稿生成（规划中，下一步重点）** — 结合用户上传的补充资料 + 各页 PPT 内容，为每页撰写演讲稿，写入 PPTX 的 Speaker Notes。当前代码中无任何 notes 相关实现。详见下方「演讲稿生成」规划。
 2. **UI 界面增强（规划中）** — 在现有 Streamlit 基础上扩展：资料上传、逐页预览、演讲稿编辑与导出。详见下方「UI 规划」。
-3. **大纲逆推路线接入主流水线** — 把实验中的语义大纲重建作为可选模式（如 `--mode {anchor,outline}`），与坐标锚定路线统一切换。
-4. **Layout Validator（美学验证器）** — 文本溢出 / 元素碰撞检测，对标 AeSlides。
-5. **编辑动作指令范式** — 让 Agent 输出结构化编辑动作而非直接改文本，对标 PPTAgent。
-6. **CER 消融实验** — 量化纠错各环节对最终准确率的贡献，用于课程报告。
+3. **Layout Validator（美学验证器）** — 文本溢出 / 元素碰撞检测，对标 AeSlides。
+4. **编辑动作指令范式** — 让 Agent 输出结构化编辑动作而非直接改文本，对标 PPTAgent。
+5. **CER 消融实验** — 量化纠错各环节对最终准确率的贡献，用于课程报告。
 
 ## 演讲稿生成（规划中）
 
